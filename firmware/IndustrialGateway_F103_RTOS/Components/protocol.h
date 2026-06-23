@@ -2,7 +2,6 @@
 #define __PROTOCOL_H
 #define CMD_GET_DEVICE_INFO       0x03
 #define CMD_RESP_DEVICE_INFO      0x83
-
 #define GATEWAY_ID                0x0001
 #define FW_VERSION                0x0901
 #define PROTOCOL_VERSION          0x0100
@@ -24,9 +23,16 @@
 #define DEVICE_STATUS_OK          0x0001
 
 #include "stdint.h"
-
+#include "log_app.h"
 uint16_t Protocol_CalcCRC16(uint8_t *data, uint16_t len);
 uint8_t Protocol_SendDeviceInfo(void);
 
+#define PROTOCOL_LEN_GET_LOG_INFO      0x01
+#define PROTOCOL_LEN_RESP_LOG_INFO     0x10
+#define FRAME_LEN_GET_LOG_INFO         6
+#define FRAME_LEN_RESP_LOG_INFO        21
+#define CMD_GET_LOG_INFO               0x04
+#define CMD_RESP_LOG_INFO              0x84
+uint8_t Protocol_SendLogInfo(LogRuntimeInfo_t info);
 #endif
 

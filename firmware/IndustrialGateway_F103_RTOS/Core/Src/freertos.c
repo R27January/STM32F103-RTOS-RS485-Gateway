@@ -196,7 +196,7 @@ void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
   */
 void MX_FREERTOS_Init(void) {
   /* USER CODE BEGIN Init */
-
+  LogRuntimeInfo_Init();
   /* USER CODE END Init */
 
   /* USER CODE BEGIN RTOS_MUTEX */
@@ -437,6 +437,13 @@ void StartCommTask(void *argument)
               {
                 Protocol_SendDeviceInfo();
               }
+              else if (rx_buf[3] == CMD_GET_LOG_INFO)
+              {
+                LogRuntimeInfo_t log_info;
+
+                LogRuntimeInfo_GetSnapshot(&log_info);
+                Protocol_SendLogInfo(log_info);
+              }
               
             }
             else
@@ -508,6 +515,14 @@ uint8_t Protocol_CheckRequest(uint8_t *rx_buf)
   else if (rx_buf[3] == CMD_GET_DEVICE_INFO)
   {
     if (rx_buf[2] != PROTOCOL_LEN_GET_DEVICE_INFO)
+    {
+      return ERR_CODE_LEN;
+    }
+    
+  }
+  else if (rx_buf[3] == CMD_GET_LOG_INFO)
+  {
+    if (rx_buf[2] != PROTOCOL_LEN_GET_LOG_INFO)
     {
       return ERR_CODE_LEN;
     }
@@ -609,8 +624,11 @@ uint16_t Protocol_CalcCRC16(uint8_t *data, uint16_t len)
 static void CommTask_SendQueryOkLog(SensorData_t sensor)
 {
   LogData_t log;
-  static uint32_t log_seq;
-  log.seq = log_seq;
+  uint32_t seq;
+
+  seq = LogRuntimeInfo_GetNextSeq();
+
+  log.seq = seq;
   log.type = LOG_TYPE_QUERY_OK;
   log.cnt = sensor.sample_count;
   log.adc = sensor.adc_value;
@@ -618,7 +636,7 @@ static void CommTask_SendQueryOkLog(SensorData_t sensor)
 
   if (xQueueSend(LogQueue, &log, 0) == pdPASS)
   {
-    log_seq++;
+    LogRuntimeInfo_OnLogAccepted(seq);
   }
 }
 void Protocol_SendLogResponse(LogData_t read_log)

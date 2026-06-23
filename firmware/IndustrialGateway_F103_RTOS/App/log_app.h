@@ -23,6 +23,20 @@ typedef struct
 uint32_t Log_CalcAddr(uint32_t seq);
 void Log_SaveOne(LogData_t *log);  
 
+typedef struct 
+{
+    uint32_t log_count;
+    uint32_t latest_seq;
+    uint32_t next_seq;
+    uint32_t max_count;
+    uint16_t record_size;
+    uint8_t log_full;
+    uint8_t reserved;
+}LogRuntimeInfo_t;
+void LogRuntimeInfo_Init(void);
+uint32_t LogRuntimeInfo_GetNextSeq(void);
+void LogRuntimeInfo_OnLogAccepted(uint32_t seq);
+void LogRuntimeInfo_GetSnapshot(LogRuntimeInfo_t *info);
 
 
 #endif
