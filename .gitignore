@@ -53,3 +53,42 @@ dkms.conf
 
 # debug information files
 *.dwo
+# Keil MDK build outputs
+
+Objects/
+Listings/
+*.o
+*.d
+*.crf
+*.lst
+*.map
+*.axf
+*.hex
+*.bin
+*.elf
+*.htm
+*.lnp
+*.sct
+*.dep
+
+# Keil user/local files
+
+*.uvguix.*
+*.uvoptx
+*.bak
+*.scvd
+*.dbgconf
+
+# VSCode local settings
+
+.vscode/
+
+# Windows temporary files
+
+Thumbs.db
+desktop.ini
+
+# CubeMX backup files
+
+*.mxproject.bak
+*.ioc.bak
