@@ -332,3 +332,98 @@ LEN + CMD + DATA
 ```
 
 Frame header `AA 55` and CRC bytes are not included in the CRC calculation.
+## V9.2 Log Information Query
+
+### Command: Get Log Runtime Information
+
+This command is used by the host PC to query the current runtime status of the log system.
+
+Request frame:
+
+```text
+AA 55 01 04 01 E3
+```
+
+Frame format:
+
+| Field | Value | Description                  |
+| ----- | ----: | ---------------------------- |
+| HEAD  | AA 55 | Frame header                 |
+| LEN   |    01 | CMD only, no DATA            |
+| CMD   |    04 | CMD_GET_LOG_INFO             |
+| CRC   | 01 E3 | CRC16-Modbus, low byte first |
+
+### Response Frame
+
+Response command:
+
+```text
+CMD_RESP_LOG_INFO = 0x84
+```
+
+Response LEN:
+
+```text
+PROTOCOL_LEN_RESP_LOG_INFO = 0x10
+```
+
+Response total frame length:
+
+```text
+21 bytes
+```
+
+Response format:
+
+```text
+AA 55 10 84 LOG_COUNT LATEST_SEQ MAX_COUNT RECORD_SIZE LOG_FULL CRC_L CRC_H
+```
+
+DATA field layout:
+
+| Field       |    Size | Description                         |
+| ----------- | ------: | ----------------------------------- |
+| log_count   | 4 bytes | Current runtime log count           |
+| latest_seq  | 4 bytes | Latest accepted log sequence number |
+| max_count   | 4 bytes | Maximum supported log record count  |
+| record_size | 2 bytes | Size of one `LogData_t` record      |
+| log_full    |  1 byte | 0 = not full, 1 = full              |
+
+Byte order:
+
+```text
+Normal multi-byte DATA fields: high byte first
+CRC16 field: low byte first
+```
+
+Example response after power-on, before sensor query:
+
+```text
+AA 55 10 84 00 00 00 00 00 00 00 00 00 00 00 80 00 0C 00 32 16
+```
+
+Decoded result:
+
+```text
+log_count   = 0
+latest_seq  = 0
+max_count   = 128
+record_size = 12
+log_full    = 0
+```
+
+Example response after two successful sensor queries:
+
+```text
+AA 55 10 84 00 00 00 02 00 00 00 01 00 00 00 80 00 0C 00 0A 1D
+```
+
+Decoded result:
+
+```text
+log_count   = 2
+latest_seq  = 1
+max_count   = 128
+record_size = 12
+log_full    = 0
+```

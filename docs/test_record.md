@@ -361,3 +361,161 @@ The gateway returned a valid `CMD_RESP_DEVICE_INFO` response frame. The frame he
 ### Conclusion
 
 V9.1 device information query function passed. The new command did not break the existing V8 protocol functions.
+## V9.2 Log Info Query Test
+
+### Test Target
+
+Verify the `CMD_GET_LOG_INFO` command and runtime log status tracking.
+
+This test checks:
+
+```text
+1. LogRuntimeInfo initialization
+2. log_count update after successful sensor query
+3. latest_seq update after successful sensor query
+4. CMD_GET_LOG_INFO response frame
+5. Repeated CMD_GET_LOG_INFO does not create new logs
+6. Existing CMD_GET_LOG query remains valid
+```
+
+### Test 1: Query LOG_INFO after power-on
+
+Request:
+
+```text
+AA 55 01 04 01 E3
+```
+
+Response:
+
+```text
+AA 55 10 84 00 00 00 00 00 00 00 00 00 00 00 80 00 0C 00 32 16
+```
+
+Decoded result:
+
+```text
+log_count   = 0
+latest_seq  = 0
+max_count   = 128
+record_size = 12
+log_full    = 0
+```
+
+Result:
+
+```text
+PASS
+```
+
+### Test 2: Query sensor once, then query LOG_INFO
+
+Sensor query:
+
+```text
+AA 55 01 01 C1 E0
+```
+
+Sensor response:
+
+```text
+AA 55 05 81 00 07 0C F9 48 D3
+```
+
+LOG_INFO query:
+
+```text
+AA 55 01 04 01 E3
+```
+
+LOG_INFO response:
+
+```text
+AA 55 10 84 00 00 00 01 00 00 00 00 00 00 00 80 00 0C 00 CF D5
+```
+
+Decoded result:
+
+```text
+log_count   = 1
+latest_seq  = 0
+max_count   = 128
+record_size = 12
+log_full    = 0
+```
+
+Result:
+
+```text
+PASS
+```
+
+### Test 3: Query sensor twice, then query LOG_INFO
+
+Sensor query:
+
+```text
+AA 55 01 01 C1 E0
+```
+
+Sensor response:
+
+```text
+AA 55 05 81 00 7D 0C C6 29 1A
+```
+
+LOG_INFO response:
+
+```text
+AA 55 10 84 00 00 00 02 00 00 00 01 00 00 00 80 00 0C 00 0A 1D
+```
+
+Decoded result:
+
+```text
+log_count   = 2
+latest_seq  = 1
+max_count   = 128
+record_size = 12
+log_full    = 0
+```
+
+Result:
+
+```text
+PASS
+```
+
+### Test 4: Repeated LOG_INFO query
+
+Repeated `CMD_GET_LOG_INFO` requests return the same result:
+
+```text
+log_count   = 2
+latest_seq  = 1
+```
+
+No new log is created by `CMD_GET_LOG_INFO`.
+
+Result:
+
+```text
+PASS
+```
+
+### Test 5: Existing CMD_GET_LOG regression
+
+Query `seq=0` and `seq=1` using existing `CMD_GET_LOG`.
+
+Result:
+
+```text
+Both seq=0 and seq=1 can be queried correctly.
+Existing W25Q64 log query function remains valid.
+```
+
+Final result:
+
+```text
+V9.2 PASS
+```
