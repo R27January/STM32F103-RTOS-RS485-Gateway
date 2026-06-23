@@ -37,6 +37,7 @@
 #include "bsp_w25q64.h"
 #include "event_groups.h"
 #include "timers.h" 
+#include "protocol.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -69,9 +70,10 @@ typedef struct
 #define PROTOCOL_LEN_GET_SENSOR     0x01  /* 请求帧LEN字段：CMD+DATA共1字节，只有CMD */
 #define PROTOCOL_LEN_RESP_SENSOR    0x05  /* 正常响应LEN字段：CMD+DATA共5字节 */
 #define PROTOCOL_LEN_RESP_ERROR     0x02  /* 错误响应LEN字段：CMD+DATA共2字节 */
-#define PROTOCOL_LEN_RESP_LOG   0x0B
+#define PROTOCOL_LEN_RESP_LOG       0x0B
 #define PROTOCOL_CRC_LEN            2     /* CRC16字段长度：CRC_L和CRC_H共2字节 */
 #define PROTOCOL_LEN_GET_LOG        0x05
+#define PROTOCOL_LEN_GET_DEVICE_INFO    0x01
 
 /* Whole frame length */
 #define FRAME_LEN_GET_SENSOR        6   /* 请求整帧长度：帧头2+LEN1+CMD1+CRC2 */
@@ -431,6 +433,10 @@ void StartCommTask(void *argument)
                 Protocol_SendLogResponse(read_log);
 
               }
+              else if (rx_buf[3] == CMD_GET_DEVICE_INFO)
+              {
+                Protocol_SendDeviceInfo();
+              }
               
             }
             else
@@ -499,6 +505,15 @@ uint8_t Protocol_CheckRequest(uint8_t *rx_buf)
       return ERR_CODE_LEN;
     }
   }
+  else if (rx_buf[3] == CMD_GET_DEVICE_INFO)
+  {
+    if (rx_buf[2] != PROTOCOL_LEN_GET_DEVICE_INFO)
+    {
+      return ERR_CODE_LEN;
+    }
+    
+  }
+  
   else
   {
     return ERR_CODE_CMD;
@@ -565,6 +580,8 @@ uint8_t Protocol_CalcXor(uint8_t*data,uint8_t len)
   return check;
 }
 */
+
+/*
 uint16_t Protocol_CalcCRC16(uint8_t *data, uint16_t len)
 {
   uint16_t crc = 0xFFFF;
@@ -587,6 +604,8 @@ uint16_t Protocol_CalcCRC16(uint8_t *data, uint16_t len)
   }
   return crc;
 }
+*/
+
 static void CommTask_SendQueryOkLog(SensorData_t sensor)
 {
   LogData_t log;

@@ -274,3 +274,61 @@ Planned response data:
 The current protocol is a custom protocol designed for project learning and testing.
 
 Future versions may add Modbus RTU support or provide a Modbus-style register mapping.
+## CMD_GET_DEVICE_INFO
+
+| Item          | Value                           |
+| ------------- | ------------------------------- |
+| Command       | `CMD_GET_DEVICE_INFO`           |
+| Command Code  | `0x03`                          |
+| Response      | `CMD_RESP_DEVICE_INFO`          |
+| Response Code | `0x83`                          |
+| Direction     | PC / Python -> Gateway          |
+| Purpose       | Query basic gateway information |
+
+### Request Frame
+
+```text
+AA 55 01 03 CRC_L CRC_H
+```
+
+Example:
+
+```text
+AA 55 01 03 40 21
+```
+
+### Response Frame
+
+```text
+AA 55 0B 83 DATA CRC_L CRC_H
+```
+
+### Response DATA Format
+
+| Field              |    Size | Description                      |
+| ------------------ | ------: | -------------------------------- |
+| `gateway_id`       | 2 bytes | Gateway device ID                |
+| `fw_version`       | 2 bytes | Firmware version                 |
+| `protocol_version` | 2 bytes | Upstream custom protocol version |
+| `feature_flags`    | 2 bytes | Supported feature bitmap         |
+| `device_status`    | 2 bytes | Basic device running status      |
+
+### Byte Order
+
+All 16-bit data fields are transmitted in high-byte-first order.
+
+CRC16-Modbus is transmitted in low-byte-first order:
+
+```text
+CRC_L CRC_H
+```
+
+### CRC Range
+
+CRC16-Modbus is calculated over:
+
+```text
+LEN + CMD + DATA
+```
+
+Frame header `AA 55` and CRC bytes are not included in the CRC calculation.

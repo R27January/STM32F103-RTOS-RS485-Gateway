@@ -305,3 +305,59 @@ Planned V9 test targets:
 * Clear log area
 * Manage log count and latest sequence
 * Improve log validity checking
+## V9.1 Device Info Query Test
+
+### Purpose
+
+Verify that the gateway supports the new `CMD_GET_DEVICE_INFO` command and can return basic gateway information through the upstream RS485 custom protocol.
+
+### Test Environment
+
+| Item                    | Value                             |
+| ----------------------- | --------------------------------- |
+| MCU                     | STM32F103C8T6                     |
+| RTOS                    | FreeRTOS                          |
+| Upstream Interface      | USART1 + RS485                    |
+| RS485 Direction Control | PB12                              |
+| Protocol                | Custom protocol with CRC16-Modbus |
+| Firmware Stage          | V9.1                              |
+
+### Request Frame
+
+```text
+AA 55 01 03 40 21
+```
+
+### Expected Response
+
+```text
+AA 55 0B 83 ...
+```
+
+The response should contain the following fields:
+
+| Field              | Expected Meaning          |
+| ------------------ | ------------------------- |
+| `gateway_id`       | Gateway device ID         |
+| `fw_version`       | Firmware version          |
+| `protocol_version` | Upstream protocol version |
+| `feature_flags`    | Supported feature bitmap  |
+| `device_status`    | Basic running status      |
+
+### Test Result
+
+PASS
+
+The gateway returned a valid `CMD_RESP_DEVICE_INFO` response frame. The frame header, length, response command, data fields, and CRC format matched the protocol design.
+
+### Regression Test
+
+| Test Item                    | Result |
+| ---------------------------- | ------ |
+| `CMD_GET_SENSOR`             | PASS   |
+| `CMD_GET_LOG`                | PASS   |
+| Invalid frame error response | PASS   |
+
+### Conclusion
+
+V9.1 device information query function passed. The new command did not break the existing V8 protocol functions.
