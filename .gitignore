@@ -92,3 +92,40 @@ desktop.ini
 
 *.mxproject.bak
 *.ioc.bak
+# Python virtual environment and cache
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.py[cod]
+
+# Python build/cache
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Keil MDK generated folders, any level
+**/Objects/
+**/Listings/
+**/[Oo]bjects/
+**/[Ll]istings/
+
+# Keil generated files
+*.o
+*.d
+*.crf
+*.lst
+*.map
+*.axf
+*.hex
+*.bin
+*.elf
+*.htm
+*.lnp
+*.dep
+*.bak
