@@ -33,6 +33,18 @@ uint8_t Protocol_SendDeviceInfo(void);
 #define FRAME_LEN_RESP_LOG_INFO        21
 #define CMD_GET_LOG_INFO               0x04
 #define CMD_RESP_LOG_INFO              0x84
+
 uint8_t Protocol_SendLogInfo(LogRuntimeInfo_t info);
+
+#define CMD_CLEAR_LOG        0x05
+#define CMD_RESP_CLEAR_LOG   0x85
+#define PROTOCOL_LEN_CLEAR_LOG  0x05
+#define PROTOCOL_LEN_RESP_CLEAR_LOG  0x02
+#define FRAME_LEN_RESP_CLEAR_LOG     0x07
+#define CLEAR_LOG_OK                 0x00
+#define CLEAR_LOG_CONFIRM_ERR        0x01
+
+uint8_t Protocol_SendClearLogResponse(uint8_t status);
+
 #endif
 

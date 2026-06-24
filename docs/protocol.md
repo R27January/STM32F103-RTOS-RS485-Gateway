@@ -471,3 +471,82 @@ the record sequence number does not match the current scan index
 ```
 
 This prevents empty flash records and damaged records from being treated as valid logs.
+## V9.4 Clear Log Command
+
+### Command Definition
+
+V9.4 adds a clear-log command to erase the W25Q64 log area through the upstream RS485 protocol.
+
+| Name                          |  Value | Description                    |
+| ----------------------------- | -----: | ------------------------------ |
+| `CMD_CLEAR_LOG`               | `0x05` | Clear log request              |
+| `CMD_RESP_CLEAR_LOG`          | `0x85` | Clear log response             |
+| `PROTOCOL_LEN_CLEAR_LOG`      | `0x05` | CMD + 4-byte confirmation code |
+| `PROTOCOL_LEN_RESP_CLEAR_LOG` | `0x02` | CMD + status                   |
+
+### Clear Log Request
+
+The clear-log request must contain a 4-byte confirmation code to avoid accidental log erasing.
+
+Request format:
+
+```text
+AA 55 LEN CMD DATA CRC_L CRC_H
+```
+
+Field definition:
+
+| Field | Value         | Description                      |
+| ----- | ------------- | -------------------------------- |
+| HEAD  | `AA 55`       | Frame header                     |
+| LEN   | `05`          | CMD + 4-byte confirmation code   |
+| CMD   | `05`          | `CMD_CLEAR_LOG`                  |
+| DATA  | `43 4C 52 21` | ASCII string `CLR!`              |
+| CRC   | CRC16-Modbus  | Calculated from LEN + CMD + DATA |
+
+Valid clear-log request:
+
+```text
+AA 55 05 05 43 4C 52 21 E5 65
+```
+
+### Clear Log Response
+
+Response format:
+
+```text
+AA 55 02 85 STATUS CRC_L CRC_H
+```
+
+Status definition:
+
+| Status | Description             |
+| -----: | ----------------------- |
+| `0x00` | Clear log succeeded     |
+| `0x01` | Confirmation code error |
+
+Success response:
+
+```text
+AA 55 02 85 00 B2 90
+```
+
+Confirmation-code error response:
+
+```text
+AA 55 02 85 01 73 50
+```
+
+### Processing Logic
+
+When a valid clear-log request is received, the device performs the following steps:
+
+```text
+1. Verify frame header, LEN, CMD, and CRC.
+2. Check the confirmation code "CLR!".
+3. Erase the W25Q64 log sector at LOG_START_ADDR.
+4. Reset LogRuntimeInfo by calling LogRuntimeInfo_Init().
+5. Return CMD_RESP_CLEAR_LOG with status 0x00.
+```
+
+After the clear-log command succeeds, old log records become invalid, and `CMD_GET_LOG_INFO` should report an empty log state.

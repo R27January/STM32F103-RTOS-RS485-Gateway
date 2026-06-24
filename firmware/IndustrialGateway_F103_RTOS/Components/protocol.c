@@ -100,3 +100,24 @@ uint8_t Protocol_SendLogInfo(LogRuntimeInfo_t info)
 
   return 1;
 }
+uint8_t Protocol_SendClearLogResponse(uint8_t status)
+{
+  uint8_t tx_buf[FRAME_LEN_RESP_CLEAR_LOG] = {0};
+  uint16_t crc;
+
+  tx_buf[0] = 0xAA;
+  tx_buf[1] = 0x55;
+  tx_buf[2] = PROTOCOL_LEN_RESP_CLEAR_LOG;
+  tx_buf[3] = CMD_RESP_CLEAR_LOG;
+
+  tx_buf[4] = status;
+
+  crc = Protocol_CalcCRC16(&tx_buf[2], tx_buf[2] + 1);
+
+  tx_buf[5] = (uint8_t)(crc &0xFF);
+  tx_buf[6] = (uint8_t)(crc >> 8);
+
+  BSP_RS485_SendBytes(tx_buf,FRAME_LEN_RESP_CLEAR_LOG);
+
+  return 1;
+}

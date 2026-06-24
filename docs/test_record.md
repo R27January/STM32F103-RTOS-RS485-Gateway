@@ -632,3 +632,74 @@ After pressing the reset button, the device rebuilt the log runtime information 
 ### Conclusion
 
 V9.3 log validation and runtime rebuild passed the board-level verification. Empty flash records, unwritten log slots, and out-of-range sequence numbers are no longer returned as valid logs.
+## V9.4 Clear Log Command Test
+
+### Test Target
+
+Verify that the device can clear W25Q64 log records through an upstream RS485 command, without manually changing the boot-time erase macro.
+
+### Test Commands
+
+Generate log records by sending `CMD_GET_SENSOR` several times:
+
+```text
+AA 55 01 01 C1 E0
+```
+
+Query log runtime information:
+
+```text
+AA 55 01 04 01 E3
+```
+
+Send clear-log request with confirmation code `CLR!`:
+
+```text
+AA 55 05 05 43 4C 52 21 E5 65
+```
+
+Query log record `seq=0`:
+
+```text
+AA 55 05 02 00 00 00 00 79 8E
+```
+
+### Observed Response
+
+The clear-log command returned:
+
+```text
+AA 55 02 85 00 B2 90
+```
+
+This means:
+
+```text
+CMD_RESP_CLEAR_LOG = 0x85
+status = 0x00
+```
+
+The result indicates that the clear-log command was accepted and executed successfully.
+
+After clearing logs, querying `seq=0` returned:
+
+```text
+AA 55 02 E0 05 59 C3
+```
+
+This means:
+
+```text
+CMD_RESP_ERROR = 0xE0
+ERR_CODE_LOG_INVALID = 0x05
+```
+
+The result indicates that the previous log record `seq=0` is no longer valid.
+
+The log runtime information was also cleared, and `CMD_GET_LOG_INFO` returned an empty log state.
+
+### Conclusion
+
+V9.4 clear-log command passed the board-level verification.
+
+The device can now erase the W25Q64 log area through an RS485 command, reset runtime log information, and reject old log queries after clearing. The manual `LOG_ACCEPTANCE_ERASE_ON_BOOT` test switch is no longer required for normal log clearing.
