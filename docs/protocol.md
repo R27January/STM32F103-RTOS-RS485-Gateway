@@ -427,3 +427,47 @@ max_count   = 128
 record_size = 12
 log_full    = 0
 ```
+## V9.3 Log Record Validation
+
+### Log Record Format
+
+In V9.3, each log record stored in W25Q64 flash contains a fixed marker and an internal CRC checksum.
+
+| Field      |    Size | Description                      |
+| ---------- | ------: | -------------------------------- |
+| magic      | 2 bytes | Fixed marker `0xA55A`            |
+| source     |  1 byte | Log source                       |
+| target_id  |  1 byte | Target device ID                 |
+| type       |  1 byte | Log type                         |
+| err_code   |  1 byte | Error code                       |
+| seq        | 4 bytes | Log sequence number              |
+| cnt        | 2 bytes | Sensor sample count              |
+| adc        | 2 bytes | ADC value                        |
+| record_crc | 2 bytes | CRC16 checksum of the log record |
+
+The `record_crc` field protects one flash log record. It is different from the protocol CRC used in RS485 frames.
+
+### Log Validity Check
+
+A log record is considered valid only when both conditions are true:
+
+```text
+magic == 0xA55A
+record_crc == calculated CRC16 of the record content
+```
+
+If either check fails, the log record is treated as invalid.
+
+### Runtime Rebuild After Reset
+
+On startup, the device scans the log area in W25Q64 flash and rebuilds the runtime log information.
+
+The rebuild process stops when:
+
+```text
+an invalid log record is found
+or
+the record sequence number does not match the current scan index
+```
+
+This prevents empty flash records and damaged records from being treated as valid logs.
