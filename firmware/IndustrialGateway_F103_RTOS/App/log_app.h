@@ -5,6 +5,9 @@
 
 #define LOG_START_ADDR   0x001000
 #define LOG_MAX_COUNT    128
+#define LOG_MAGIC  0xA55A
+#define LOG_TARGET_NONE  0x00
+
 
 typedef enum
 {
@@ -12,13 +15,24 @@ typedef enum
     LOG_TYPE_PROTOCOL_ERR ,
     LOG_TYPE_MAX
 } LogType_t;
+typedef enum
+{
+    LOG_SOURCE_LOCAL = 0x01,
+    LOG_SOURCE_UPSTREAM = 0x02,
+    LOG_SOURCE_DOWNSTREAM = 0x03
+}LogSource_t;
 typedef struct 
 {
+    uint16_t magic;
+    uint8_t source;
+    uint8_t target_id;
+    uint8_t type;
+    uint8_t err_code;
     uint32_t seq;
-    LogType_t type;
     uint16_t cnt;
     uint16_t adc;
-    uint8_t err_code;
+    uint16_t record_crc;
+
 }LogData_t;
 uint32_t Log_CalcAddr(uint32_t seq);
 void Log_SaveOne(LogData_t *log);  
@@ -37,7 +51,7 @@ void LogRuntimeInfo_Init(void);
 uint32_t LogRuntimeInfo_GetNextSeq(void);
 void LogRuntimeInfo_OnLogAccepted(uint32_t seq);
 void LogRuntimeInfo_GetSnapshot(LogRuntimeInfo_t *info);
-
-
+uint8_t Log_IsValid(const LogData_t *log);
+void Log_RebuildRuntimeInfo(void);
 #endif
 

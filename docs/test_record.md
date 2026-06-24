@@ -519,3 +519,116 @@ Final result:
 ```text
 V9.2 PASS
 ```
+## V9.3 Log Record Validation and Runtime Rebuild Test
+
+### Test Target
+
+Verify the V9.3 log system upgrade, including log record validity checking, per-record CRC protection, and runtime log information rebuild after reset.
+
+### Updated Log Record
+
+The log record structure was upgraded with the following fields:
+
+* `magic`: fixed log marker, used to identify valid V9.3 log records
+* `source`: log source, such as local, upstream, or downstream
+* `target_id`: target device ID, reserved for downstream Modbus devices
+* `type`: log type
+* `err_code`: error code
+* `seq`: log sequence number
+* `cnt`: sensor sample count
+* `adc`: ADC value
+* `record_crc`: CRC16 checksum for one flash log record
+
+### Test Commands
+
+Query device information:
+
+```text
+AA 55 01 03 40 21
+```
+
+Query log runtime information:
+
+```text
+AA 55 01 04 01 E3
+```
+
+Query current sensor data and generate one log record:
+
+```text
+AA 55 01 01 C1 E0
+```
+
+Query log record `seq=0`:
+
+```text
+AA 55 05 02 00 00 00 00 79 8E
+```
+
+Query log record `seq=1`:
+
+```text
+AA 55 05 02 00 00 00 01 B8 4E
+```
+
+Query log record `seq=2`:
+
+```text
+AA 55 05 02 00 00 00 02 F8 4F
+```
+
+Query unwritten log record `seq=3`:
+
+```text
+AA 55 05 02 00 00 00 03 39 8F
+```
+
+Query out-of-range log record `seq=128`:
+
+```text
+AA 55 05 02 00 00 00 80 78 2E
+```
+
+### Test Result
+
+The device information query returned a valid `CMD_RESP_DEVICE_INFO` response.
+
+The initial log information response showed:
+
+```text
+log_count   = 0
+latest_seq  = 0
+max_count   = 128
+record_size = 20
+log_full    = 0
+```
+
+After sending `CMD_GET_SENSOR` three times, three valid log records were generated. The log information response showed:
+
+```text
+log_count   = 3
+latest_seq  = 2
+max_count   = 128
+record_size = 20
+log_full    = 0
+```
+
+The queries for `seq=0`, `seq=1`, and `seq=2` all returned valid `CMD_RESP_LOG` responses.
+
+The query for unwritten `seq=3` returned:
+
+```text
+AA 55 02 E0 05 59 C3
+```
+
+The query for out-of-range `seq=128` also returned:
+
+```text
+AA 55 02 E0 05 59 C3
+```
+
+After pressing the reset button, the device rebuilt the log runtime information from W25Q64 flash. The log information remained valid, proving that `Log_RebuildRuntimeInfo()` can recover `log_count` and `latest_seq` after reset.
+
+### Conclusion
+
+V9.3 log validation and runtime rebuild passed the board-level verification. Empty flash records, unwritten log slots, and out-of-range sequence numbers are no longer returned as valid logs.

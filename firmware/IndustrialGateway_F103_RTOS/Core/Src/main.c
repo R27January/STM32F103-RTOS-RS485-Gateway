@@ -104,7 +104,14 @@ int main(void)
   BSP_OLED_Init();
   BSP_OLED_Clear();
 
+  #define LOG_ACCEPTANCE_ERASE_ON_BOOT  0
 
+  #if LOG_ACCEPTANCE_ERASE_ON_BOOT
+  BSP_W25Q64_SectorErase(LOG_START_ADDR);
+  #endif
+
+  Log_RebuildRuntimeInfo();  
+  //LogRuntimeInfo_Init();
   /* USER CODE END 2 */
 
   /* Init scheduler */
