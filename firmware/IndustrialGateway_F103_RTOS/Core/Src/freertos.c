@@ -41,6 +41,7 @@
 #include "modbus_rtu.h"
 #include "bsp_rs485_down.h"
 #include "cws91.h"
+#include "downstream_data.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -56,7 +57,13 @@ typedef struct
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define UART_DMA_RX_BUF_SIZE    64
+#define CMD_GET_DOWNSTREAM_STATUS           0x07
+#define CMD_RESP_DOWNSTREAM_STATUS          0x87
 
+#define PROTOCOL_LEN_GET_DOWNSTREAM_STATUS  0x01
+#define PROTOCOL_LEN_RESP_DOWNSTREAM_STATUS 0x14
+
+#define FRAME_LEN_RESP_DOWNSTREAM_STATUS    25
 
 /* Protocol frame head */
 #define PROTOCOL_HEAD1              0xAA  /* 帧头�?字节，固定为0xAA */
@@ -97,6 +104,8 @@ typedef struct
 /*Event */
 #define EVENT_COMM_OK               (1 << 0)
 #define EVENT_PROTOCOL_ERR          (1 << 1)
+
+
 
 /* USER CODE END PD */
 
@@ -203,7 +212,10 @@ void StartSensorTask(void *argument);
 void StartDisplayTask(void *argument);
 void StartCommTask(void *argument);
 void StartLogTask(void *argument);
-
+static void Protocol_SendDownstreamDataResponse(DownstreamData_t *data);
+static void OLED_ShowSignedX10(uint8_t x, uint8_t y, int16_t value);
+static void OLED_ShowUnsignedX10(uint8_t x, uint8_t y, uint16_t value);
+static void Protocol_SendDownstreamStatusResponse(DownstreamData_t *data);
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 
 /**
@@ -214,6 +226,7 @@ void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 void MX_FREERTOS_Init(void) {
   /* USER CODE BEGIN Init */
   //LogRuntimeInfo_Init();
+  DownstreamData_Init();
   /* USER CODE END Init */
 
   /* USER CODE BEGIN RTOS_MUTEX */
@@ -285,70 +298,67 @@ void MX_FREERTOS_Init(void) {
 void StartDefaultTask(void *argument)
 {
   /* USER CODE BEGIN StartDefaultTask */
-  /* Infinite loop */
-  //modbus_tx_len = Modbus_BuildReadHoldingRegsReq(0x01, 0x0000, 0x0002, modbus_tx_buf);
+  uint8_t retry;
+  uint8_t poll_ok;
+  uint8_t err_code;
+
   for(;;)
   {
-  modbus_tx_len = Modbus_BuildReadHoldingRegsReq(0x01, 0x0000, 0x0002, modbus_tx_buf);
+    poll_ok = 0;
+    err_code = DOWN_ERR_TIMEOUT;
 
-  memset(modbus_rx_buf, 0, sizeof(modbus_rx_buf));
+    DownstreamData_OnPollStart(DOWNSTREAM_CWS91_ID);
 
-  BSP_RS485_Down_SendBytes(modbus_tx_buf, modbus_tx_len);
-
-  modbus_rx_ret = HAL_UART_Receive(&huart2, modbus_rx_buf, 9, 300);
-
-  if (modbus_rx_ret == HAL_OK)
-  {
-      modbus_check_ret = Modbus_CheckReadHoldingRegsResp(modbus_rx_buf, 9);
-      
-      if (modbus_check_ret == MODBUS_OK)
-      {
-        cws91_parse_ret = CWS91_ParseTempHum(modbus_rx_buf,&cws91_temp_x10,&cws91_hum_x10);
-        if (cws91_parse_ret == MODBUS_OK)
-        {
-          if (xSemaphoreTake(OLEDMutex,pdMS_TO_TICKS(100)) == pdPASS)
-          {
-                BSP_OLED_ClearLine(0);
-                BSP_OLED_ShowString(0, 0, "T:");
-                BSP_OLED_ShowNum(2, 0, cws91_temp_x10 / 10, 2);
-                BSP_OLED_ShowString(4, 0, ".");
-                BSP_OLED_ShowNum(5, 0, cws91_temp_x10 % 10, 1);
-
-                BSP_OLED_ShowString(7, 0, "H:");
-                BSP_OLED_ShowNum(9, 0, cws91_hum_x10 / 10, 2);
-                BSP_OLED_ShowString(11, 0, ".");
-                BSP_OLED_ShowNum(12, 0, cws91_hum_x10 % 10, 1);         
-                
-                xSemaphoreGive(OLEDMutex);
-          }
-          
-        }
-        
-      }
-    //test_count++;
-    //if(xSemaphoreTake(OLEDMutex,pdMS_TO_TICKS(100)) == pdPASS)
-    //{
-    //  //BSP_OLED_ShowNum(0,6,test_count,5);
-    //  xSemaphoreGive(OLEDMutex);
-    //}
-    //if (xSemaphoreTake(UARTMutex,pdMS_TO_TICKS(100)) ==pdPASS)
-    //{
-    //  //HAL_UART_Transmit(&huart1,(uint8_t*)"TEST\r\n",6,100);
-    //  xSemaphoreGive(UARTMutex);
-    //}
-    //osDelay(500);
-  }
-    else
+    for (retry = 0; retry <= DOWNSTREAM_RETRY_COUNT; retry++)
     {
-        if (xSemaphoreTake(OLEDMutex, pdMS_TO_TICKS(100)) == pdPASS)
+      modbus_tx_len = Modbus_BuildReadHoldingRegsReq(DOWNSTREAM_CWS91_ID, 0x0000, 0x0002, modbus_tx_buf);
+
+      memset(modbus_rx_buf, 0, sizeof(modbus_rx_buf));
+
+      BSP_RS485_Down_SendBytes(modbus_tx_buf, modbus_tx_len);
+
+      modbus_rx_ret = HAL_UART_Receive(&huart2, modbus_rx_buf, 9, 300);
+
+      if (modbus_rx_ret == HAL_OK)
+      {
+        modbus_check_ret = Modbus_CheckReadHoldingRegsResp(modbus_rx_buf, 9);
+
+        if (modbus_check_ret == MODBUS_OK)
         {
-            BSP_OLED_ShowString(0, 0, "CWS91 RX ERR  ");
-            xSemaphoreGive(OLEDMutex);
+          cws91_parse_ret = CWS91_ParseTempHum(modbus_rx_buf, &cws91_temp_x10, &cws91_hum_x10);
+
+          if (cws91_parse_ret == MODBUS_OK)
+          {
+            DownstreamData_UpdateSuccess(DOWNSTREAM_CWS91_ID, cws91_temp_x10, cws91_hum_x10);
+            poll_ok = 1;
+            break;
+          }
+          else
+          {
+            err_code = DOWN_ERR_PARSE;
+          }
         }
+        else
+        {
+          err_code = DOWN_ERR_CRC;
+        }
+      }
+      else
+      {
+        err_code = DOWN_ERR_TIMEOUT;
+      }
+
+      osDelay(50);
     }
+
+    if (poll_ok == 0)
+    {
+      DownstreamData_UpdateFail(DOWNSTREAM_CWS91_ID, err_code);
+    }
+
     osDelay(1000);
+  }
   /* USER CODE END StartDefaultTask */
-}
 }
 /* USER CODE BEGIN Header_StartSensorTask */
 /**
@@ -398,10 +408,18 @@ void StartDisplayTask(void *argument)
     BSP_OLED_ShowString(0, 4, "ADC:");
     BSP_OLED_ShowString(0, 6, "STAT:");
     xSemaphoreGive(OLEDMutex);
-
   }
+  */
+  SensorData_t latest_display_data = {0, 0};
+  DownstreamData_t down_data;
   for(;;)
   {
+    while (xQueueReceive(DisplayDataQueue, &display_data, 0) == pdPASS)
+    {
+      latest_display_data = display_data;
+    }
+    DownstreamData_GetSnapshot(&down_data);
+    /*    
     EventBits_t bits;
     const char* status_text;
 
@@ -411,20 +429,52 @@ void StartDisplayTask(void *argument)
     if(xQueueReceive(DisplayDataQueue,&display_data,portMAX_DELAY) == pdPASS)
     {
       display_count++;
+      */
       if(xSemaphoreTake(OLEDMutex,pdMS_TO_TICKS(100)) == pdPASS)
       {
+      BSP_OLED_ClearLine(0);
+      BSP_OLED_ShowString(0, 0, "V11 GATEWAY");
 
+      BSP_OLED_ClearLine(2);
+      BSP_OLED_ShowString(0, 2, "ADC:");
+      BSP_OLED_ShowNum(4, 2, latest_display_data.adc_value, 4);
+      BSP_OLED_ShowString(9, 2, "CNT:");
+      BSP_OLED_ShowNum(13, 2, latest_display_data.sample_count % 1000, 3);
+
+      BSP_OLED_ClearLine(4);
+      if (down_data.valid)
+      {
+        BSP_OLED_ShowString(0, 4, "T:");
+        OLED_ShowSignedX10(2, 4, down_data.temp_x10);
+        BSP_OLED_ShowString(8, 4, "H:");
+        OLED_ShowUnsignedX10(10, 4, down_data.hum_x10);
+      }
+      else
+      {
+        BSP_OLED_ShowString(0, 4, "NO DOWN DATA");
+      }
+
+      BSP_OLED_ClearLine(6);
+      BSP_OLED_ShowString(0, 6, "UPD:");
+      BSP_OLED_ShowNum(4, 6, down_data.update_count, 5);
+      if (down_data.valid)
+      {
+        BSP_OLED_ShowString(10, 6, "VALID");
+      }
+      else
+      {
+        BSP_OLED_ShowString(10, 6, "EMPTY");
+      }        
+        /*
         BSP_OLED_ShowNum(6,2,display_data.sample_count,5);    
         BSP_OLED_ShowNum(6,4,display_data.adc_value,5);
         BSP_OLED_ShowString(6,6,status_text);
+        */
         xSemaphoreGive(OLEDMutex);
       }
-    }
+
+    //}
     osDelay(500);
-  }*/
-  for(;;)
-  {
-    osDelay(1000); 
   }
   /* USER CODE END StartDisplayTask */
 }
@@ -527,6 +577,20 @@ void StartCommTask(void *argument)
                 LogRuntimeInfo_GetSnapshot(&log_info);
                 Protocol_SendLogInfo(log_info);
               }
+              else if (rx_buf[3] == CMD_GET_DOWNSTREAM_DATA)
+              {
+                DownstreamData_t down_data;
+              
+                DownstreamData_GetSnapshot(&down_data);
+                Protocol_SendDownstreamDataResponse(&down_data);
+              }
+              else if (rx_buf[3] == CMD_GET_DOWNSTREAM_STATUS)
+              {
+                DownstreamData_t down_data;
+              
+                DownstreamData_GetSnapshot(&down_data);
+                Protocol_SendDownstreamStatusResponse(&down_data);
+              }
               else if (rx_buf[3] == CMD_CLEAR_LOG)
               {
                 if (rx_buf[4] == 'C' && rx_buf[5] == 'L' && rx_buf[6] == 'R' && rx_buf[7] == '!' )
@@ -622,6 +686,20 @@ uint8_t Protocol_CheckRequest(uint8_t *rx_buf)
   else if (rx_buf[3] == CMD_GET_LOG_INFO)
   {
     if (rx_buf[2] != PROTOCOL_LEN_GET_LOG_INFO)
+    {
+      return ERR_CODE_LEN;
+    }
+  }
+  else if (rx_buf[3] == CMD_GET_DOWNSTREAM_DATA)
+  {
+    if (rx_buf[2] != PROTOCOL_LEN_GET_DOWNSTREAM_DATA)
+    {
+      return ERR_CODE_LEN;
+    }
+  }
+  else if (rx_buf[3] == CMD_GET_DOWNSTREAM_STATUS)
+  {
+    if (rx_buf[2] != PROTOCOL_LEN_GET_DOWNSTREAM_STATUS)
     {
       return ERR_CODE_LEN;
     }
@@ -822,6 +900,108 @@ static const char* SystemStatus_GetText(EventBits_t bits)
 void CommTimeoutTimerCallback(TimerHandle_t xTimer)
 {
   xEventGroupClearBits(SystemEventGroup,EVENT_COMM_OK);
+}
+static void Protocol_SendDownstreamDataResponse(DownstreamData_t *data)
+{
+  uint8_t tx_buf[FRAME_LEN_RESP_DOWNSTREAM_DATA];
+  uint16_t crc;
+  uint16_t temp_raw;
+
+  temp_raw = (uint16_t)data->temp_x10;
+
+  tx_buf[0] = PROTOCOL_HEAD1;
+  tx_buf[1] = PROTOCOL_HEAD2;
+  tx_buf[2] = PROTOCOL_LEN_RESP_DOWNSTREAM_DATA;
+  tx_buf[3] = CMD_RESP_DOWNSTREAM_DATA;
+
+  tx_buf[4] = data->target_id;
+  tx_buf[5] = data->valid;
+
+  tx_buf[6] = (uint8_t)(temp_raw >> 8);
+  tx_buf[7] = (uint8_t)(temp_raw);
+
+  tx_buf[8] = (uint8_t)(data->hum_x10 >> 8);
+  tx_buf[9] = (uint8_t)(data->hum_x10);
+
+  tx_buf[10] = (uint8_t)(data->update_count >> 24);
+  tx_buf[11] = (uint8_t)(data->update_count >> 16);
+  tx_buf[12] = (uint8_t)(data->update_count >> 8);
+  tx_buf[13] = (uint8_t)(data->update_count);
+
+  crc = Protocol_CalcCRC16(&tx_buf[2], tx_buf[2] + 1);
+
+  tx_buf[14] = (uint8_t)crc;
+  tx_buf[15] = (uint8_t)(crc >> 8);
+
+  BSP_RS485_SendBytes(tx_buf, FRAME_LEN_RESP_DOWNSTREAM_DATA);
+}
+
+static void OLED_ShowSignedX10(uint8_t x, uint8_t y, int16_t value)
+{
+  uint16_t abs_value;
+
+  if (value < 0)
+  {
+    BSP_OLED_ShowString(x, y, "-");
+    abs_value = (uint16_t)(-value);
+  }
+  else
+  {
+    BSP_OLED_ShowString(x, y, " ");
+    abs_value = (uint16_t)value;
+  }
+
+  BSP_OLED_ShowNum(x + 1, y, abs_value / 10, 3);
+  BSP_OLED_ShowString(x + 4, y, ".");
+  BSP_OLED_ShowNum(x + 5, y, abs_value % 10, 1);
+}
+
+static void OLED_ShowUnsignedX10(uint8_t x, uint8_t y, uint16_t value)
+{
+  BSP_OLED_ShowNum(x, y, value / 10, 3);
+  BSP_OLED_ShowString(x + 3, y, ".");
+  BSP_OLED_ShowNum(x + 4, y, value % 10, 1);
+}
+static void Protocol_SendDownstreamStatusResponse(DownstreamData_t *data)
+{
+  uint8_t tx_buf[FRAME_LEN_RESP_DOWNSTREAM_STATUS];
+  uint16_t crc;
+
+  tx_buf[0] = PROTOCOL_HEAD1;
+  tx_buf[1] = PROTOCOL_HEAD2;
+  tx_buf[2] = PROTOCOL_LEN_RESP_DOWNSTREAM_STATUS;
+  tx_buf[3] = CMD_RESP_DOWNSTREAM_STATUS;
+
+  tx_buf[4] = data->target_id;
+  tx_buf[5] = data->online;
+  tx_buf[6] = data->last_err;
+
+  tx_buf[7]  = (uint8_t)(data->poll_count >> 24);
+  tx_buf[8]  = (uint8_t)(data->poll_count >> 16);
+  tx_buf[9]  = (uint8_t)(data->poll_count >> 8);
+  tx_buf[10] = (uint8_t)(data->poll_count);
+
+  tx_buf[11] = (uint8_t)(data->success_count >> 24);
+  tx_buf[12] = (uint8_t)(data->success_count >> 16);
+  tx_buf[13] = (uint8_t)(data->success_count >> 8);
+  tx_buf[14] = (uint8_t)(data->success_count);
+
+  tx_buf[15] = (uint8_t)(data->timeout_count >> 24);
+  tx_buf[16] = (uint8_t)(data->timeout_count >> 16);
+  tx_buf[17] = (uint8_t)(data->timeout_count >> 8);
+  tx_buf[18] = (uint8_t)(data->timeout_count);
+
+  tx_buf[19] = (uint8_t)(data->crc_err_count >> 24);
+  tx_buf[20] = (uint8_t)(data->crc_err_count >> 16);
+  tx_buf[21] = (uint8_t)(data->crc_err_count >> 8);
+  tx_buf[22] = (uint8_t)(data->crc_err_count);
+
+  crc = Protocol_CalcCRC16(&tx_buf[2], tx_buf[2] + 1);
+
+  tx_buf[23] = (uint8_t)crc;
+  tx_buf[24] = (uint8_t)(crc >> 8);
+
+  BSP_RS485_SendBytes(tx_buf, FRAME_LEN_RESP_DOWNSTREAM_STATUS);
 }
 /* USER CODE END Application */
 

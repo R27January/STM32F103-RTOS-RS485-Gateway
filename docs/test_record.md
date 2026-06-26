@@ -703,3 +703,229 @@ The log runtime information was also cleared, and `CMD_GET_LOG_INFO` returned an
 V9.4 clear-log command passed the board-level verification.
 
 The device can now erase the W25Q64 log area through an RS485 command, reset runtime log information, and reject old log queries after clearing. The manual `LOG_ACCEPTANCE_ERASE_ON_BOOT` test switch is no longer required for normal log clearing.
+## V10 Hardware Test - Downstream CWS91 Modbus RTU
+
+Date: 2026-06-26
+
+### Test Objective
+
+Verify that the STM32F103 gateway can communicate with the downstream CWS91 RS485 temperature and humidity sensor through USART2 and a TTL-to-RS485 module.
+
+### Hardware Setup
+
+| Module                  | Connection                     |
+| ----------------------- | ------------------------------ |
+| STM32 USART2 TX/RX      | Downstream TTL-to-RS485 module |
+| RS485 Direction Control | PB13                           |
+| CWS91 Power Supply      | 12V external power supply      |
+| Protocol                | Modbus RTU                     |
+| Sensor Address          | 0x01                           |
+
+### Test Result
+
+The STM32 successfully generated the Modbus RTU request frame, sent it through the downstream RS485 bus, received the CWS91 response frame, verified the CRC, and parsed temperature and humidity values.
+
+The OLED temporarily displayed live T/H values during V10 validation.
+
+### Conclusion
+
+V10 passed.
+
+The STM32F103 can work as a Modbus RTU master and read real temperature and humidity data from the downstream CWS91 RS485 sensor.
+
+---
+
+## V11 Hardware Test - Gateway Closed-loop Query
+
+Date: 2026-06-26
+
+### Test Objective
+
+Verify that the upstream PC can query cached downstream CWS91 temperature and humidity data through the STM32 gateway.
+
+The expected data path is:
+
+```text
+PC / Serial Tool
+→ USB-RS485
+→ STM32 USART1 upstream custom AA55 protocol
+→ DownstreamData cache
+→ Cached CWS91 temperature and humidity response
+```
+
+The STM32 should return cached downstream data instead of blocking the upstream command while reading the CWS91 sensor.
+
+### Test 1: Query Downstream Cached Data
+
+Sent frame:
+
+```text
+AA 55 01 06 80 22
+```
+
+Received frame:
+
+```text
+AA 55 0B 86 01 01 01 0C 03 53 00 00 00 5C E3 0C
+```
+
+Parsed result:
+
+| Field            | Value                  |
+| ---------------- | ---------------------- |
+| Response Command | 0x86                   |
+| target_id        | 0x01                   |
+| valid            | 0x01                   |
+| temperature      | 0x010C / 10 = 26.8 °C  |
+| humidity         | 0x0353 / 10 = 85.1 %RH |
+| update_count     | 0x0000005C = 92        |
+| CRC              | 0x0CE3, sent as E3 0C  |
+
+Conclusion:
+
+The STM32 successfully returned cached downstream CWS91 data through the upstream AA55 custom protocol.
+
+### Test 2: Original GET_SENSOR Regression Test
+
+Sent frame:
+
+```text
+AA 55 01 01 C1 E0
+```
+
+Received frame:
+
+```text
+AA 55 05 81 00 C5 0D E3 69 74
+```
+
+Parsed result:
+
+| Field            | Value         |
+| ---------------- | ------------- |
+| Response Command | 0x81          |
+| sample_count     | 0x00C5 = 197  |
+| adc_value        | 0x0DE3 = 3555 |
+
+Conclusion:
+
+The original GET_SENSOR command still works after adding the V11 downstream data cache query.
+
+### Final V11 Conclusion
+
+V11 passed.
+
+The gateway now supports a complete upstream-to-downstream closed loop. The STM32 periodically polls the downstream CWS91 sensor in the background, updates the DownstreamData cache, and responds to upstream PC queries with the latest cached temperature and humidity data.
+## V12 Hardware Test - Downstream Diagnostics and Online Status
+
+Date: 2026-06-26
+
+### Test Objective
+
+Verify that the STM32F103 gateway can detect downstream CWS91 online/offline status, record communication errors, and return diagnostic counters through the upstream AA55 custom protocol.
+
+The expected diagnostic functions are:
+
+* Detect downstream online status during normal communication
+* Detect offline status after disconnecting downstream A/B lines
+* Record timeout count
+* Clear last error after communication recovery
+* Return diagnostic counters through CMD_GET_DOWNSTREAM_STATUS
+
+### Test Command
+
+Sent frame:
+
+```text
+AA 55 01 07 41 E2
+```
+
+Expected response command:
+
+```text
+CMD_RESP_DOWNSTREAM_STATUS = 0x87
+```
+
+---
+
+### Test 1: Normal Online Status
+
+Received frame:
+
+```text
+AA 55 14 87 01 01 00 00 00 00 0F 00 00 00 0F 00 00 00 00 00 00 00 00 DF 98
+```
+
+Parsed result:
+
+| Field         | Value |
+| ------------- | ----- |
+| target_id     | 0x01  |
+| online        | 0x01  |
+| last_err      | 0x00  |
+| poll_count    | 15    |
+| success_count | 15    |
+| timeout_count | 0     |
+| crc_err_count | 0     |
+
+Conclusion:
+
+The downstream CWS91 sensor was online. Polling and success counters increased normally, and no timeout or CRC error was detected.
+
+---
+
+### Test 2: Offline Detection After Disconnecting Downstream A/B
+
+Received frame after disconnecting downstream A/B lines:
+
+```text
+AA 55 14 87 01 00 01 00 00 00 6D 00 00 00 69 00 00 00 03 00 00 00 00 9E B4
+```
+
+Parsed result:
+
+| Field         | Value |
+| ------------- | ----- |
+| target_id     | 0x01  |
+| online        | 0x00  |
+| last_err      | 0x01  |
+| poll_count    | 109   |
+| success_count | 105   |
+| timeout_count | 3     |
+| crc_err_count | 0     |
+
+Conclusion:
+
+After the downstream A/B lines were disconnected, the gateway detected communication timeout and marked the downstream device as offline.
+
+---
+
+### Test 3: Recovery After Reconnecting Downstream A/B
+
+Received frame after reconnecting downstream A/B lines:
+
+```text
+AA 55 14 87 01 01 00 00 00 00 4C 00 00 00 04 00 00 00 48 00 00 00 00 B7 A5
+```
+
+Parsed result:
+
+| Field         | Value |
+| ------------- | ----- |
+| target_id     | 0x01  |
+| online        | 0x01  |
+| last_err      | 0x00  |
+| poll_count    | 76    |
+| success_count | 4     |
+| timeout_count | 72    |
+| crc_err_count | 0     |
+
+Conclusion:
+
+After the downstream A/B lines were reconnected correctly, the gateway recovered communication with the CWS91 sensor. The online flag returned to 1, and the last error code was cleared.
+
+### Final V12 Conclusion
+
+V12 passed.
+
+The gateway now supports downstream online/offline detection, timeout statistics, CRC error statistics, and upstream diagnostic query through CMD_GET_DOWNSTREAM_STATUS.

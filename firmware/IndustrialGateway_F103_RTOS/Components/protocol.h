@@ -46,5 +46,12 @@ uint8_t Protocol_SendLogInfo(LogRuntimeInfo_t info);
 
 uint8_t Protocol_SendClearLogResponse(uint8_t status);
 
+#define CMD_GET_DOWNSTREAM_DATA          0x06
+#define CMD_RESP_DOWNSTREAM_DATA         0x86
+
+#define PROTOCOL_LEN_GET_DOWNSTREAM_DATA 0x01
+#define PROTOCOL_LEN_RESP_DOWNSTREAM_DATA 0x0B
+
+#define FRAME_LEN_RESP_DOWNSTREAM_DATA   16
 #endif
 

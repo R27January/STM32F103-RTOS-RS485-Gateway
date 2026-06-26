@@ -550,3 +550,221 @@ When a valid clear-log request is received, the device performs the following st
 ```
 
 After the clear-log command succeeds, old log records become invalid, and `CMD_GET_LOG_INFO` should report an empty log state.
+## V10 Downstream Modbus RTU Interface
+
+V10 adds a downstream Modbus RTU interface for the CWS91 RS485 temperature and humidity sensor.
+
+### Downstream Hardware Interface
+
+| Item                    | Description                                 |
+| ----------------------- | ------------------------------------------- |
+| UART                    | USART2                                      |
+| RS485 Direction Control | PB13                                        |
+| Protocol                | Modbus RTU                                  |
+| Device                  | CWS91 RS485 temperature and humidity sensor |
+| Sensor Address          | 0x01                                        |
+| Baud Rate               | 9600                                        |
+| Format                  | 8N1                                         |
+| Power Supply            | 12V external supply                         |
+
+### CWS91 Read Request
+
+The STM32 works as a Modbus RTU master and sends the following request to read two holding registers from address 0x0000:
+
+```text
+01 03 00 00 00 02 C4 0B
+```
+
+Frame fields:
+
+| Field          | Value  | Description                  |
+| -------------- | ------ | ---------------------------- |
+| Slave Address  | 0x01   | CWS91 default Modbus address |
+| Function Code  | 0x03   | Read holding registers       |
+| Start Address  | 0x0000 | First register address       |
+| Register Count | 0x0002 | Read two registers           |
+| CRC            | 0x0BC4 | CRC16-Modbus, low byte first |
+
+### CWS91 Response Format
+
+```text
+01 03 04 TEMP_H TEMP_L HUM_H HUM_L CRC_L CRC_H
+```
+
+Field description:
+
+| Field         | Description                  |
+| ------------- | ---------------------------- |
+| TEMP_H/TEMP_L | Raw temperature register     |
+| HUM_H/HUM_L   | Raw humidity register        |
+| CRC_L/CRC_H   | CRC16-Modbus, low byte first |
+
+Parsing rule:
+
+```text
+temperature = raw_temperature / 10.0
+humidity    = raw_humidity / 10.0
+```
+
+---
+
+## V11 Upstream Command: CMD_GET_DOWNSTREAM_DATA
+
+V11 adds a new upstream AA55 protocol command to query cached downstream sensor data.
+
+### Command Definition
+
+| Name                     | Value | Description                                 |
+| ------------------------ | ----- | ------------------------------------------- |
+| CMD_GET_DOWNSTREAM_DATA  | 0x06  | Query cached downstream sensor data         |
+| CMD_RESP_DOWNSTREAM_DATA | 0x86  | Response with cached downstream sensor data |
+
+### Request Frame
+
+```text
+AA 55 01 06 80 22
+```
+
+Frame fields:
+
+| Field | Value | Description                  |
+| ----- | ----- | ---------------------------- |
+| HEAD  | AA 55 | Fixed frame header           |
+| LEN   | 0x01  | CMD only                     |
+| CMD   | 0x06  | CMD_GET_DOWNSTREAM_DATA      |
+| CRC   | 80 22 | CRC16-Modbus, low byte first |
+
+CRC calculation range:
+
+```text
+LEN + CMD
+```
+
+### Response Frame Format
+
+```text
+AA 55 0B 86 ID VALID TEMP_H TEMP_L HUM_H HUM_L UPD_3 UPD_2 UPD_1 UPD_0 CRC_L CRC_H
+```
+
+Field description:
+
+| Field         | Description                                        |
+| ------------- | -------------------------------------------------- |
+| ID            | Downstream target device ID, CWS91 default is 0x01 |
+| VALID         | Cache valid flag, 0x01 means valid                 |
+| TEMP_H/TEMP_L | Temperature x10, signed int16_t                    |
+| HUM_H/HUM_L   | Humidity x10, unsigned uint16_t                    |
+| UPD_3~UPD_0   | Cache update count, uint32_t                       |
+| CRC_L/CRC_H   | CRC16-Modbus, low byte first                       |
+
+Example response:
+
+```text
+AA 55 0B 86 01 01 01 0C 03 53 00 00 00 5C E3 0C
+```
+
+Parsed result:
+
+| Field        | Value                  |
+| ------------ | ---------------------- |
+| target_id    | 0x01                   |
+| valid        | 0x01                   |
+| temperature  | 0x010C / 10 = 26.8 °C  |
+| humidity     | 0x0353 / 10 = 85.1 %RH |
+| update_count | 0x0000005C = 92        |
+| CRC          | 0x0CE3, sent as E3 0C  |
+## V12 Upstream Command: CMD_GET_DOWNSTREAM_STATUS
+
+V12 adds a new upstream AA55 protocol command to query downstream communication diagnostics.
+
+### Command Definition
+
+| Name                       | Value | Description                                  |
+| -------------------------- | ----- | -------------------------------------------- |
+| CMD_GET_DOWNSTREAM_STATUS  | 0x07  | Query downstream communication status        |
+| CMD_RESP_DOWNSTREAM_STATUS | 0x87  | Response with downstream diagnostic counters |
+
+### Error Code Definition
+
+| Error Code | Name             | Description                         |
+| ---------- | ---------------- | ----------------------------------- |
+| 0x00       | DOWN_ERR_NONE    | No error                            |
+| 0x01       | DOWN_ERR_TIMEOUT | Downstream response timeout         |
+| 0x02       | DOWN_ERR_CRC     | Downstream CRC or frame check error |
+| 0x03       | DOWN_ERR_PARSE   | CWS91 data parse error              |
+
+### Request Frame
+
+```text
+AA 55 01 07 41 E2
+```
+
+Frame fields:
+
+| Field | Value | Description                  |
+| ----- | ----- | ---------------------------- |
+| HEAD  | AA 55 | Fixed frame header           |
+| LEN   | 0x01  | CMD only                     |
+| CMD   | 0x07  | CMD_GET_DOWNSTREAM_STATUS    |
+| CRC   | 41 E2 | CRC16-Modbus, low byte first |
+
+CRC calculation range:
+
+```text
+LEN + CMD
+```
+
+### Response Frame Format
+
+```text
+AA 55 14 87 ID ONLINE LAST_ERR POLL_3 POLL_2 POLL_1 POLL_0 SUC_3 SUC_2 SUC_1 SUC_0 TO_3 TO_2 TO_1 TO_0 CRCERR_3 CRCERR_2 CRCERR_1 CRCERR_0 CRC_L CRC_H
+```
+
+Field description:
+
+| Field             | Description                                        |
+| ----------------- | -------------------------------------------------- |
+| ID                | Downstream target device ID, CWS91 default is 0x01 |
+| ONLINE            | 0x01 means online, 0x00 means offline              |
+| LAST_ERR          | Last downstream communication error code           |
+| POLL_3~POLL_0     | Total downstream polling count, uint32_t           |
+| SUC_3~SUC_0       | Successful polling count, uint32_t                 |
+| TO_3~TO_0         | Timeout count, uint32_t                            |
+| CRCERR_3~CRCERR_0 | CRC or frame check error count, uint32_t           |
+| CRC_L/CRC_H       | CRC16-Modbus, low byte first                       |
+
+### Example: Online Status
+
+```text
+AA 55 14 87 01 01 00 00 00 00 0F 00 00 00 0F 00 00 00 00 00 00 00 00 DF 98
+```
+
+Parsed result:
+
+| Field         | Value |
+| ------------- | ----- |
+| target_id     | 0x01  |
+| online        | 0x01  |
+| last_err      | 0x00  |
+| poll_count    | 15    |
+| success_count | 15    |
+| timeout_count | 0     |
+| crc_err_count | 0     |
+
+### Example: Offline Status
+
+```text
+AA 55 14 87 01 00 01 00 00 00 6D 00 00 00 69 00 00 00 03 00 00 00 00 9E B4
+```
+
+Parsed result:
+
+| Field         | Value |
+| ------------- | ----- |
+| target_id     | 0x01  |
+| online        | 0x00  |
+| last_err      | 0x01  |
+| poll_count    | 109   |
+| success_count | 105   |
+| timeout_count | 3     |
+| crc_err_count | 0     |

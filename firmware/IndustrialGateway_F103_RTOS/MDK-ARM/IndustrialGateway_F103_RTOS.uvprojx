@@ -1185,6 +1185,16 @@
               <FileType>5</FileType>
               <FilePath>..\App\cws91.h</FilePath>
             </File>
+            <File>
+              <FileName>downstream_data.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\App\downstream_data.c</FilePath>
+            </File>
+            <File>
+              <FileName>downstream_data.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\App\downstream_data.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
