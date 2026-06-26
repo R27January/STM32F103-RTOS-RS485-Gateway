@@ -38,6 +38,9 @@
 #include "event_groups.h"
 #include "timers.h" 
 #include "protocol.h"
+#include "modbus_rtu.h"
+#include "bsp_rs485_down.h"
+#include "cws91.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -122,6 +125,19 @@ uint32_t display_count = 0;
 uint32_t comm_count = 0;
 uint32_t sensor_value = 0;
 uint32_t test_count = 0;
+//uint8_t modbus_rx_buf[9];
+//HAL_StatusTypeDef modbus_rx_ret;
+//uint32_t modbus_rx_ok_count = 0;
+//uint32_t modbus_rx_fail_count = 0;
+uint8_t modbus_tx_buf[8];
+uint16_t modbus_tx_len;
+uint8_t modbus_rx_buf[9];
+HAL_StatusTypeDef modbus_rx_ret;
+uint8_t modbus_check_ret;
+uint8_t cws91_parse_ret;
+
+int16_t cws91_temp_x10 = 0;
+uint16_t cws91_hum_x10 = 0;
 
 uint8_t uart_dma_rx_buf[UART_DMA_RX_BUF_SIZE];
 volatile uint16_t uart_rx_len = 0;
@@ -187,6 +203,7 @@ void StartSensorTask(void *argument);
 void StartDisplayTask(void *argument);
 void StartCommTask(void *argument);
 void StartLogTask(void *argument);
+
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 
 /**
@@ -237,6 +254,7 @@ void MX_FREERTOS_Init(void) {
 
   /* creation of CommTask */
   CommTaskHandle = osThreadNew(StartCommTask, NULL, &CommTask_attributes);
+
   /* creation of LogTask */
   LogTaskHandle = osThreadNew(StartLogTask, NULL, &LogTask_attributes);
 
@@ -268,24 +286,70 @@ void StartDefaultTask(void *argument)
 {
   /* USER CODE BEGIN StartDefaultTask */
   /* Infinite loop */
+  //modbus_tx_len = Modbus_BuildReadHoldingRegsReq(0x01, 0x0000, 0x0002, modbus_tx_buf);
   for(;;)
   {
-    test_count++;
-    if(xSemaphoreTake(OLEDMutex,pdMS_TO_TICKS(100)) == pdPASS)
-    {
-      //BSP_OLED_ShowNum(0,6,test_count,5);
-      xSemaphoreGive(OLEDMutex);
-    }
-    if (xSemaphoreTake(UARTMutex,pdMS_TO_TICKS(100)) ==pdPASS)
-    {
-      //HAL_UART_Transmit(&huart1,(uint8_t*)"TEST\r\n",6,100);
-      xSemaphoreGive(UARTMutex);
-    }
-    osDelay(500);
+  modbus_tx_len = Modbus_BuildReadHoldingRegsReq(0x01, 0x0000, 0x0002, modbus_tx_buf);
+
+  memset(modbus_rx_buf, 0, sizeof(modbus_rx_buf));
+
+  BSP_RS485_Down_SendBytes(modbus_tx_buf, modbus_tx_len);
+
+  modbus_rx_ret = HAL_UART_Receive(&huart2, modbus_rx_buf, 9, 300);
+
+  if (modbus_rx_ret == HAL_OK)
+  {
+      modbus_check_ret = Modbus_CheckReadHoldingRegsResp(modbus_rx_buf, 9);
+      
+      if (modbus_check_ret == MODBUS_OK)
+      {
+        cws91_parse_ret = CWS91_ParseTempHum(modbus_rx_buf,&cws91_temp_x10,&cws91_hum_x10);
+        if (cws91_parse_ret == MODBUS_OK)
+        {
+          if (xSemaphoreTake(OLEDMutex,pdMS_TO_TICKS(100)) == pdPASS)
+          {
+                BSP_OLED_ClearLine(0);
+                BSP_OLED_ShowString(0, 0, "T:");
+                BSP_OLED_ShowNum(2, 0, cws91_temp_x10 / 10, 2);
+                BSP_OLED_ShowString(4, 0, ".");
+                BSP_OLED_ShowNum(5, 0, cws91_temp_x10 % 10, 1);
+
+                BSP_OLED_ShowString(7, 0, "H:");
+                BSP_OLED_ShowNum(9, 0, cws91_hum_x10 / 10, 2);
+                BSP_OLED_ShowString(11, 0, ".");
+                BSP_OLED_ShowNum(12, 0, cws91_hum_x10 % 10, 1);         
+                
+                xSemaphoreGive(OLEDMutex);
+          }
+          
+        }
+        
+      }
+    //test_count++;
+    //if(xSemaphoreTake(OLEDMutex,pdMS_TO_TICKS(100)) == pdPASS)
+    //{
+    //  //BSP_OLED_ShowNum(0,6,test_count,5);
+    //  xSemaphoreGive(OLEDMutex);
+    //}
+    //if (xSemaphoreTake(UARTMutex,pdMS_TO_TICKS(100)) ==pdPASS)
+    //{
+    //  //HAL_UART_Transmit(&huart1,(uint8_t*)"TEST\r\n",6,100);
+    //  xSemaphoreGive(UARTMutex);
+    //}
+    //osDelay(500);
   }
+    else
+    {
+        if (xSemaphoreTake(OLEDMutex, pdMS_TO_TICKS(100)) == pdPASS)
+        {
+            BSP_OLED_ShowString(0, 0, "CWS91 RX ERR  ");
+            xSemaphoreGive(OLEDMutex);
+        }
+    }
+    osDelay(1000);
   /* USER CODE END StartDefaultTask */
 }
-
+}
 /* USER CODE BEGIN Header_StartSensorTask */
 /**
 * @brief Function implementing the SensorTask thread.
@@ -321,10 +385,12 @@ void StartSensorTask(void *argument)
 * @retval None
 */
 /* USER CODE END Header_StartDisplayTask */
+
 void StartDisplayTask(void *argument)
 {
   /* USER CODE BEGIN StartDisplayTask */
   /* Infinite loop */
+  /*
   if(xSemaphoreTake(OLEDMutex,pdMS_TO_TICKS(100)) == pdPASS)
   {
     BSP_OLED_ShowString(0,0,"V1 RUN");  
@@ -355,6 +421,10 @@ void StartDisplayTask(void *argument)
       }
     }
     osDelay(500);
+  }*/
+  for(;;)
+  {
+    osDelay(1000); 
   }
   /* USER CODE END StartDisplayTask */
 }

@@ -1140,6 +1140,16 @@
               <FileType>5</FileType>
               <FilePath>..\Bsp\bsp_w25q64.h</FilePath>
             </File>
+            <File>
+              <FileName>bsp_rs485_down.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Bsp\bsp_rs485_down.c</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_rs485_down.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Bsp\bsp_rs485_down.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -1154,6 +1164,26 @@
               <FileName>log_app.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\App\log_app.h</FilePath>
+            </File>
+            <File>
+              <FileName>modbus_rtu.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\App\modbus_rtu.h</FilePath>
+            </File>
+            <File>
+              <FileName>modbus_rtu.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\App\modbus_rtu.c</FilePath>
+            </File>
+            <File>
+              <FileName>cws91.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\App\cws91.c</FilePath>
+            </File>
+            <File>
+              <FileName>cws91.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\App\cws91.h</FilePath>
             </File>
           </Files>
         </Group>

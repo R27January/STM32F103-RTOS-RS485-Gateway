@@ -61,6 +61,8 @@ void Error_Handler(void);
 #define W25Q64_CS_GPIO_Port GPIOA
 #define RS485_DIR_Pin GPIO_PIN_12
 #define RS485_DIR_GPIO_Port GPIOB
+#define RS485_DOWN_DE_Pin GPIO_PIN_13
+#define RS485_DOWN_DE_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 

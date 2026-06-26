@@ -100,6 +100,7 @@ int main(void)
   MX_USART1_UART_Init();
   MX_ADC1_Init();
   MX_SPI1_Init();
+  MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
   BSP_OLED_Init();
   BSP_OLED_Clear();
